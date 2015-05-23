@@ -10,6 +10,7 @@ client.query(<<-SQL
     id INT(14) PRIMARY KEY,
     user VARCHAR(30),
     time TIMESTAMP,
+    thread varchar(256),
     message TEXT)
   SQL
   )
@@ -20,21 +21,30 @@ doc = Nokogiri::HTML(f)
 f.close
 
 puts 'Storing Messages in DB'
-messages = doc.css(".message")
-count = messages.count
-messages.each_with_index do |message, index|
-  print "Storing message #{index} of #{count}\r"
-  # puts "#{index} #{message.css(".user").text}: #{message.css(".meta").text}"
-  # puts message.next_element.text
-  client.query(<<-SQL
-  INSERT INTO messages (id, user, time, message)
-  VALUES (
-    #{ index },
-    '#{ client.escape(message.css(".user").text) }',
-    '#{ Time.parse(message.css(".meta").text).to_s }',
-    '#{ client.escape(message.next_element.text) }')
-  SQL
-  )
-end
 
-puts "\nDone."
+index = 0
+
+threads = doc.css('.thread')
+threads.each do |thread|
+  participants = thread.children.first.text
+  puts "Processing thread: #{ participants[0..55] }..."
+  messages = thread.css(".message")
+  messages.each do |message|
+    print "Storing message #{index}\r"
+
+    insert_query = <<-SQL
+    INSERT INTO messages (id, user, time, message, thread)
+    VALUES (
+      #{ index },
+      '#{ client.escape(message.css(".user").text) }',
+      '#{ Time.parse(message.css(".meta").text).to_s }',
+      '#{ client.escape(message.next_element.text) }',
+      '#{ participants }')
+    SQL
+
+    client.query(insert_query)
+    index += 1
+  end
+  print "\r\e[A\r\e[K"
+end
+puts "\n\nDone."
